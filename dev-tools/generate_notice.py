@@ -9,6 +9,8 @@ import csv
 import re
 import pdb
 import copy
+import subprocess
+import fnmatch
 
 
 def read_file(filename):
@@ -26,135 +28,116 @@ def read_file(filename):
             return f.read()
 
 
-def read_go_mod(vendor_dir):
-    lines = []
-    with open(os.path.join(vendor_dir, "modules.txt")) as f:
-        lines = f.readlines()
-
-    deps = []
-    for line in lines:
-        if line.startswith("# "):
-            line = line[2:]
-            elems = line.split(" ")
-            if len(elems) == 2:
-                data = _get_version_info(elems)
-                deps.append(data)
-                continue
-
-            if " => " in line:
-                data = _get_replaced_dep_data(line)
-                deps.append(data)
-
-    return deps
-
-
-def _get_version_info(elems):
-    data = {}
-    data["path"] = elems[0]
-
-    version_info = elems[1].rstrip("\n")
-    if version_info.endswith("+incompatible"):
-        version_info = version_info[:-len("+incompatible")]
-
-    if len(version_info) < 30:
-        data["version"] = version_info
-        return data
-
-    revision_elems = version_info.split("-")
-    if len(revision_elems) != 3:
-        raise ValueError("unexpected number of elements")
-
-    if revision_elems[0] != "v0.0.0":
-        data["version"] = revision_elems[0]
-    data["revision"] = revision_elems[2]
-
-    return data
-
-
-def _get_replaced_dep_data(line):
-    original, fork = line.split(" => ")
-    elems = fork.split(" ")
-    fork_data = _get_version_info(elems)
-    elems = original.split(" ")
-    data = _get_version_info(elems)
-
-    if "path" in fork_data:
-        data["overwrite-path"] = fork_data["path"]
-    if "version" in fork_data:
-        data["overwrite-version"] = fork_data["version"]
-    if "revision" in fork_data:
-        data["overwrite-revision"] = fork_data["revision"]
-
-    if "revision" in data and data["revision"] == "000000000000":
-        del(data["revision"])
-
-    return data
-
-
-def get_library_path(license):
+def read_go_module_deps():
     """
-    Get the contents up to the vendor folder.
+    read_go_deps returns a dictionary of modules, with the module path
+    as the key and the value being a dictionary holding information about
+    the module. The main module is excluded; only dependencies are returned.
+
+    The module dict holds the following keys:
+     - Dir (required)
+       Local filesystem directory holding the module contents.
+       e.g. "$HOME/go/pkg/mod/github.com/elastic/go-txfile@v0.0.7"
+
+     - Path (required)
+       Module path. e.g. "github.com/elastic/beats"
+
+     - Version (optional)
+       Module version, excluding timestamp/revision and +incompatible suffix.
+       If the module has a replacement, this holds the replacement module's version.
+
+     - Revision (optional)
+       VCS revision hash, extracted from module version.
+       If the module has a replacement, this holds the replacement module's revision.
+
+     - Overwrite-Path (optional)
+       Replacement module path. e.g. "../beats", or "github.com/elastic/sarama".
     """
-    split = license.split(os.sep)
-    for i, word in reversed(list(enumerate(split))):
-        if word == "vendor":
-            return "/".join(split[i + 1:])
-    return "/".join(split)
+    output = subprocess.check_output(["go", "list", "-deps", "-json", "./..."])
+    modules = {}
+    decoder = json.JSONDecoder()
+    while True:
+        output = output.strip()
+        if not output:
+            break
+        pkg, end = decoder.raw_decode(output)
+        output = output[end:]
+
+        if 'Standard' in pkg:
+            continue
+
+        module = pkg['Module']
+        if "Main" in module:
+            continue
+
+        modules[module['Path']] = module
+        version = module["Version"]
+        replace = module.get("Replace", None)
+        del(module["Version"])
+        if replace:
+            if replace["Path"] != module["Path"]:
+                module["Overwrite-Path"] = replace["Path"]
+            # Modules with local-filesystem replacements have no version.
+            version = replace.get("Version", None)
+
+        if version:
+            i = version.rfind("+incompatible")
+            if i > 0:
+                version = version[:i]
+            version_parts = version.split("-")
+            if len(version_parts) == 3: # version-timestamp-revision
+                version = version_parts[0]
+                module["Revision"] = version_parts[2]
+            if version != "v0.0.0":
+                module["Version"] = version
+    return modules
 
 
-def gather_dependencies(vendor_dir, overrides=None):
-    dependencies = {}   # lib_path -> [array of lib]
-    libs = read_go_mod(vendor_dir)
+def gather_modules(excludes):
+    modules = read_go_module_deps()
 
     # walk looking for LICENSE files
-    for root, dirs, filenames in os.walk("./vendor"):
-        licenses = get_licenses(root)
-        for filename in licenses:
-            lib_path = get_library_path(root)
-            lib_search = [l for l in libs if l["path"].startswith(lib_path)]
-            if len(lib_search) == 0:
-                print("WARNING: No version information found for: {}".format(lib_path))
-                lib = {"path": lib_path}
-            else:
-                lib = copy.deepcopy(lib_search[0])
+    for modpath, module in modules.items():
+        moddir = module['Dir']
+        for root, dirs, filenames in os.walk(moddir):
+            reldir = os.path.relpath(root, moddir)
+            for pattern in excludes:
+                for matched in fnmatch.filter(dirs, pattern):
+                    dirs.remove(matched)
 
-            lib["license_file"] = os.path.join(root, filename)
+            for filename in get_licenses(modpath, filenames):
+                license = {}
+                license_path = os.path.join(root, filename)
+                license["license_file"] = os.path.normpath(os.path.join(modpath, reldir, filename))
+                license["license_contents"] = read_file(license_path)
+                license["license_summary"] = detect_license_summary(license["license_contents"])
 
-            lib["license_contents"] = read_file(lib["license_file"])
-            lib["license_summary"] = detect_license_summary(lib["license_contents"])
-            if lib["license_summary"] == "UNKNOWN":
-                print("WARNING: Unknown license for: {}".format(lib_path))
+                notice_filenames = fnmatch.filter(filenames, "NOTICE*")
+                license["notice_files"] = {
+                    os.path.normpath(os.path.join(modpath, reldir, filename)): read_file(os.path.join(root, filename)) for filename in notice_filenames
+                }
 
-            revision = overrides.get(lib_path, {}).get("revision")
-            if revision:
-                lib["revision"] = revision
+                if license["license_summary"] == "UNKNOWN":
+                    print("WARNING: Unknown license for {}: {}".format(modpath, os.path.join(root, filename)))
+                module["licenses"] = module.get("licenses", []) + [license]
 
-            if lib_path not in dependencies:
-                dependencies[lib_path] = [lib]
-            else:
-                dependencies[lib_path].append(lib)
-
-        # don't walk down into another vendor dir
-        if "vendor" in dirs:
-            dirs.remove("vendor")
-
-    return dependencies
+    return modules
 
 
 # Allow to skip files that could match the `LICENSE` pattern but does not have any license information.
-SKIP_FILES = [
+SKIP_FILES = {
     # AWS lambda go defines that some part of the code is APLv2 and other on a MIT Modified license.
-    "./vendor/github.com/aws/aws-lambda-go/LICENSE-SUMMARY"
-]
+    "github.com/aws/aws-lambda-go": ["LICENSE-SUMMARY"]
+}
 
 
-def get_licenses(folder):
+def get_licenses(modpath, filenames):
     """
     Get a list of license files from a given directory.
     """
     licenses = []
-    for filename in sorted(os.listdir(folder)):
-        if filename.startswith("LICENSE") and "docs" not in filename and os.path.join(folder, filename) not in SKIP_FILES:
+    for filename in sorted(filenames):
+        if filename.startswith("LICENSE") and "docs" not in filename and filename not in SKIP_FILES.get(modpath, []):
             licenses.append(filename)
         elif filename.startswith("APLv2"):  # gorhill/cronexpr
             licenses.append(filename)
@@ -163,65 +146,7 @@ def get_licenses(folder):
     return licenses
 
 
-def has_license(folder):
-    """
-    Checks if a particular repo has a license files.
-
-    There are two cases accepted:
-        * The folder contains a LICENSE
-        * The parent folder contains a LICENSE
-        * The folder only contains subdirectories AND all these
-          subdirectories contain a LICENSE
-        * The folder only contains subdirectories AND all these
-          subdirectories contain  subdirectories which contain a LICENSE (ex Azure folder)
-    """
-
-    if len(get_licenses(folder)) > 0:
-        return True, ""
-    elif len(get_licenses(os.path.join(folder, os.pardir))) > 0:  # For go.opencensus.io.
-        return True, ""
-
-    for subdir in os.listdir(folder):
-        if not os.path.isdir(os.path.join(folder, subdir)):
-            return False, folder
-        if len(get_licenses(os.path.join(folder, subdir))) > 0:
-            continue
-        for dir in os.listdir(os.path.join(folder, subdir)):
-            if not os.path.isdir(os.path.join(folder, subdir, dir)):
-                return False, subdir
-            if len(get_licenses(os.path.join(folder, subdir, dir))) == 0:
-                return False, os.path.join(folder, subdir, dir)
-
-    return True, ""
-
-
-def check_all_have_license_files(vendor_dir):
-    """
-    Checks that everything in the vendor folders has a license one way
-    or the other. This doesn't collect the licenses, because the code that
-    collects the licenses needs to walk the full tree. This one makes sure
-    that every folder in the `vendor` directories has at least one license.
-    """
-    issues = []
-    for root, dirs, filenames in os.walk(vendor_dir):
-        depth = 2
-        if root.count(os.sep) - vendor_dir.count(os.sep) == depth:  # two levels deep
-            # Two level deep means folders like `github.com/elastic`.
-            # look for the license in root but also one level up
-            ok, issue = has_license(root)
-            if not ok:
-                depth += 1
-
-                if depth > 5:
-                    print("No license in: {}".format(issue))
-                    issues.append(issue)
-
-    if len(issues) > 0:
-        raise Exception("I have found licensing issues in the following folders: {}"
-                        .format(issues))
-
-
-def write_notice_file(f, beat, copyright, dependencies):
+def write_notice_file(f, beat, copyright, modules):
 
     now = datetime.datetime.now()
 
@@ -237,21 +162,21 @@ def write_notice_file(f, beat, copyright, dependencies):
     f.write("Third party libraries used by the {} project:\n".format(beat))
     f.write("==========================================================================\n\n")
 
+    def maybe_write(dict_, key, print_key=None):
+        if key in dict_:
+            f.write("{}: {}\n".format(print_key or key, dict_.get(key)))
+
     # Sort licenses by package path, ignore upper / lower case
-    for key in sorted(dependencies, key=str.lower):
-        for lib in dependencies[key]:
+    for key in sorted(modules, key=unicode.lower):
+        module = modules[key]
+        for lib in module["licenses"]:
             f.write("\n--------------------------------------------------------------------\n")
             f.write("Dependency: {}\n".format(key))
-            if "version" in lib:
-                f.write("Version: {}\n".format(lib["version"]))
-            if "revision" in lib:
-                f.write("Revision: {}\n".format(lib["revision"]))
-            if "overwrite-path" in lib:
-                f.write("Overwrite: {}\n".format(lib["overwrite-path"]))
-            if "overwrite-version" in lib:
-                f.write("Overwrite-Version: {}\n".format(lib["overwrite-version"]))
-            if "overwrite-revision" in lib:
-                f.write("Overwrite-Revision: {}\n".format(lib["overwrite-revision"]))
+            maybe_write(module, "Version")
+            maybe_write(module, "Revision")
+            maybe_write(module, "Overwrite-Path", "Overwrite")
+            maybe_write(module, "Overwrite-Version")
+            maybe_write(module, "Overwrite-Revision")
             f.write("License type (autodetected): {}\n".format(lib["license_summary"]))
             f.write("{}:\n".format(lib["license_file"]))
             f.write("--------------------------------------------------------------------\n")
@@ -262,18 +187,18 @@ def write_notice_file(f, beat, copyright, dependencies):
                 f.write("Apache License 2.0\n\n")
 
                 # Skip NOTICE files which are not needed
-                if os.path.join(os.path.dirname(lib["license_file"])) in SKIP_NOTICE:
+                if lib["license_file"] in SKIP_NOTICE:
                     continue
 
-                for notice_file in glob.glob(os.path.join(os.path.dirname(lib["license_file"]), "NOTICE*")):
+                for notice_file, notice_contents in lib["notice_files"].items():
                     notice_file_hdr = "-------{}-----\n".format(os.path.basename(notice_file))
                     f.write(notice_file_hdr)
-                    f.write(read_file(notice_file))
+                    f.write(notice_contents)
 
 
 def write_csv_file(csvwriter, dependencies):
     csvwriter.writerow(["name", "url", "version", "revision", "license"])
-    for key in sorted(dependencies, key=str.lower):
+    for key in sorted(dependencies, key=unicode.lower):
         for lib in dependencies[key]:
             csvwriter.writerow([key, get_url(key), lib.get("version", ""), lib.get("revision", ""),
                                 lib["license_summary"]])
@@ -286,18 +211,19 @@ def get_url(repo):
     return "https://github.com/{}/{}".format(words[1], words[2])
 
 
-def create_notice(filename, beat, copyright, vendor_dir, csvfile, overrides=None):
-    dependencies = gather_dependencies(vendor_dir, overrides=overrides)
+def create_notice(filename, beat, copyright, csvfile, excludes):
+    modules = gather_modules(excludes)
+
     if not csvfile:
         with open(filename, "w+") as f:
-            write_notice_file(f, beat, copyright, dependencies)
+            write_notice_file(f, beat, copyright, modules)
             print("Available at {}".format(filename))
     else:
         with open(csvfile, "wb") as f:
             csvwriter = csv.writer(f)
-            write_csv_file(csvwriter, dependencies)
+            write_csv_file(csvwriter, modules)
             print("Available at {}".format(csvfile))
-    return dependencies
+    return modules
 
 
 APACHE2_LICENSE_TITLES = [
@@ -438,45 +364,37 @@ SKIP_NOTICE = []
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
-        description="Generate the NOTICE file from all vendor directories available in a given directory")
-    parser.add_argument("vendor",
-                        help="directory where to search for vendor directories")
+        description="Generate the NOTICE file from all modules used")
     parser.add_argument("-b", "--beat", default="Elastic Beats",
                         help="Beat name")
     parser.add_argument("-c", "--copyright", default="Elasticsearch BV",
                         help="copyright owner")
     parser.add_argument("--csv", dest="csvfile",
                         help="Output to a csv file")
-    parser.add_argument("-e", "--excludes", default=["dev-tools", "build"],
+    parser.add_argument("-e", "--excludes", default=["dev-tools", "build", "vendor", "docs"],
                         help="List of top directories to exclude")
     # no need to be generic for now, no other transitive dependency information available
-    parser.add_argument("--beats-origin", type=argparse.FileType('r'),
-                        help="path to beats vendor.json")
     parser.add_argument("-s", "--skip-notice", default=[],
                         help="List of NOTICE files to skip")
     args = parser.parse_args()
 
     cwd = os.getcwd()
     notice = os.path.join(cwd, "NOTICE.txt")
-    vendor_dir = "./vendor"
 
     excludes = args.excludes
     if not isinstance(excludes, list):
         excludes = [excludes]
     SKIP_NOTICE = args.skip_notice
 
-    overrides = {}  # revision overrides only for now
-    if args.beats_origin:
-        govendor = json.load(args.beats_origin)
-        overrides = {package['path']: package for package in govendor["package"]}
-
-    print("Get the licenses available from {}".format(vendor_dir))
-    check_all_have_license_files(vendor_dir)
-    dependencies = create_notice(notice, args.beat, args.copyright, vendor_dir, args.csvfile, overrides=overrides)
+    print("Get the licenses available")
+    modules = create_notice(notice, args.beat, args.copyright, args.csvfile, excludes)
 
     # check that all licenses are accepted
-    for _, deps in dependencies.items():
-        for dep in deps:
-            if dep["license_summary"] not in ACCEPTED_LICENSES:
-                raise Exception("Dependency {} has invalid license {}"
-                                .format(dep["path"], dep["license_summary"]))
+    for modpath, module in modules.items():
+        licenses = module.get("licenses", None)
+        if not licenses:
+            raise Exception("Missing license in module: {}".format(modpath))
+        for license in licenses:
+            if license["license_summary"] not in ACCEPTED_LICENSES:
+                raise Exception("Dependency {} has invalid {} license: {}"
+                                .format(modpath, license["license_summary"], license["license_file"]))
