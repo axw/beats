@@ -175,8 +175,6 @@ def write_notice_file(f, beat, copyright, modules):
             maybe_write(module, "Version")
             maybe_write(module, "Revision")
             maybe_write(module, "Overwrite-Path", "Overwrite")
-            maybe_write(module, "Overwrite-Version")
-            maybe_write(module, "Overwrite-Revision")
             f.write("License type (autodetected): {}\n".format(lib["license_summary"]))
             f.write("{}:\n".format(lib["license_file"]))
             f.write("--------------------------------------------------------------------\n")
