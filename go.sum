@@ -483,6 +483,8 @@ github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a/go.mod h1:bCqn
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/samuel/go-parser v0.0.0-20130731160455-ca8abbf65d0e h1:hUGyBE/4CXRPThr4b6kt+f1CN90no4Fs5CNrYOKYSIg=
 github.com/samuel/go-parser v0.0.0-20130731160455-ca8abbf65d0e/go.mod h1:Sb6li54lXV0yYEjI4wX8cucdQ9gqUJV3+Ngg3l9g30I=
+github.com/samuel/go-parser v0.0.0-20170131185712-99744db8e45c h1:q050NM3QTpaFWRCELNHj3WoBlIM2XWEXr7E7Xp1TNQA=
+github.com/samuel/go-parser v0.0.0-20170131185712-99744db8e45c/go.mod h1:Sb6li54lXV0yYEjI4wX8cucdQ9gqUJV3+Ngg3l9g30I=
 github.com/samuel/go-thrift v0.0.0-20140522043831-2187045faa54 h1:jbchLJWyhKcmOjkbC4zDvT/n5EEd7g6hnnF760rEyRA=
 github.com/samuel/go-thrift v0.0.0-20140522043831-2187045faa54/go.mod h1:Vrkh1pnjV9Bl8c3P9zH0/D4NlOHWP5d4/hF4YTULaec=
 github.com/sanathkr/go-yaml v0.0.0-20170819195128-ed9d249f429b h1:jUK33OXuZP/l6babJtnLo1qsGvq6G9so9KMflGAm4YA=

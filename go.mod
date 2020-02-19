@@ -108,7 +108,7 @@ require (
 	github.com/prometheus/common v0.7.0
 	github.com/prometheus/procfs v0.0.9-0.20191208103036-42f6e295b56f
 	github.com/rcrowley/go-metrics v0.0.0-20181016184325-3113b8401b8a
-	github.com/samuel/go-parser v0.0.0-20130731160455-ca8abbf65d0e // indirect
+	github.com/samuel/go-parser v0.0.0-20170131185712-99744db8e45c // indirect
 	github.com/samuel/go-thrift v0.0.0-20140522043831-2187045faa54
 	github.com/sanathkr/yaml v1.0.1-0.20170819201035-0056894fa522 // indirect
 	github.com/shirou/gopsutil v2.19.11+incompatible
