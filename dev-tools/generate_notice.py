@@ -12,6 +12,7 @@ import copy
 import subprocess
 import fnmatch
 
+DEFAULT_BUILD_TAGS = "darwin,linux,windows"
 
 def read_file(filename):
 
@@ -28,11 +29,11 @@ def read_file(filename):
             return f.read()
 
 
-def read_go_module_deps():
+def read_go_module_deps(main_packages, build_tags):
     """
     read_go_deps returns a dictionary of modules, with the module path
     as the key and the value being a dictionary holding information about
-    the module. The main module is excluded; only dependencies are returned.
+    the module. Main modules are excluded; only dependencies are returned.
 
     The module dict holds the following keys:
      - Dir (required)
@@ -53,7 +54,10 @@ def read_go_module_deps():
      - Overwrite-Path (optional)
        Replacement module path. e.g. "../beats", or "github.com/elastic/sarama".
     """
-    output = subprocess.check_output(["go", "list", "-deps", "-json", "./..."])
+    go_list_args = ["go", "list", "-deps", "-json"]
+    if build_tags:
+        go_list_args.extend(["-tags", build_tags])
+    output = subprocess.check_output(go_list_args + main_packages)
     modules = {}
     decoder = json.JSONDecoder()
     while True:
@@ -90,11 +94,12 @@ def read_go_module_deps():
                 module["Revision"] = version_parts[2]
             if version != "v0.0.0":
                 module["Version"] = version
+
     return modules
 
 
-def gather_modules(excludes):
-    modules = read_go_module_deps()
+def gather_modules(main_packages, build_tags, excludes):
+    modules = read_go_module_deps(main_packages, build_tags)
 
     # walk looking for LICENSE files
     for modpath, module in modules.items():
@@ -169,7 +174,7 @@ def write_notice_file(f, beat, copyright, modules):
     # Sort licenses by package path, ignore upper / lower case
     for key in sorted(modules, key=unicode.lower):
         module = modules[key]
-        for lib in module["licenses"]:
+        for lib in module.get("licenses", []):
             f.write("\n--------------------------------------------------------------------\n")
             f.write("Dependency: {}\n".format(key))
             maybe_write(module, "Version")
@@ -209,8 +214,8 @@ def get_url(repo):
     return "https://github.com/{}/{}".format(words[1], words[2])
 
 
-def create_notice(filename, beat, copyright, csvfile, excludes):
-    modules = gather_modules(excludes)
+def create_notice(filename, beat, copyright, csvfile, main_packages, build_tags, excludes):
+    modules = gather_modules(main_packages, build_tags, excludes)
 
     if not csvfile:
         with open(filename, "w+") as f:
@@ -361,8 +366,7 @@ SKIP_NOTICE = []
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(
-        description="Generate the NOTICE file from all modules used")
+    parser = argparse.ArgumentParser(description="Generate the NOTICE file from package dependencies")
     parser.add_argument("-b", "--beat", default="Elastic Beats",
                         help="Beat name")
     parser.add_argument("-c", "--copyright", default="Elasticsearch BV",
@@ -374,10 +378,13 @@ if __name__ == "__main__":
     # no need to be generic for now, no other transitive dependency information available
     parser.add_argument("-s", "--skip-notice", default=[],
                         help="List of NOTICE files to skip")
+    parser.add_argument("--build-tags", default=DEFAULT_BUILD_TAGS,
+                        help="Comma-separated list of build tags to pass to 'go list -deps'")
+    parser.add_argument("main_package", nargs="*", default=["."],
+                        help="List of main Go packages for which dependencies should be processed")
     args = parser.parse_args()
 
-    cwd = os.getcwd()
-    notice = os.path.join(cwd, "NOTICE.txt")
+    notice = os.path.abspath("NOTICE.txt")
 
     excludes = args.excludes
     if not isinstance(excludes, list):
@@ -385,7 +392,7 @@ if __name__ == "__main__":
     SKIP_NOTICE = args.skip_notice
 
     print("Get the licenses available")
-    modules = create_notice(notice, args.beat, args.copyright, args.csvfile, excludes)
+    modules = create_notice(notice, args.beat, args.copyright, args.csvfile, args.main_package, args.build_tags, excludes)
 
     # check that all licenses are accepted
     for modpath, module in modules.items():

@@ -136,7 +136,7 @@ docs:
 .PHONY: notice
 notice: python-env
 	@echo "Generating NOTICE"
-	@$(PYTHON_ENV)/bin/python dev-tools/generate_notice.py .
+	@$(PYTHON_ENV)/bin/python dev-tools/generate_notice.py ./...
 
 # Sets up the virtual python environment
 .PHONY: python-env
