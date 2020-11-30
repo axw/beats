@@ -129,9 +129,14 @@ func (f *extractArrayProcessor) Run(event *beat.Event) (*beat.Event, error) {
 		return event, errors.Wrapf(err, "unsupported type for field %s: got: %s needed: array", f.config.Field, t.String())
 	}
 
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
+
 	saved := *event
 	if f.config.FailOnError {
-		saved.Fields = event.Fields.Clone()
+		saved.Fields = fields.Clone()
 		saved.Meta = event.Meta.Clone()
 	}
 

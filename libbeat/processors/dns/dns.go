@@ -79,11 +79,15 @@ func New(cfg *common.Config) (processors.Processor, error) {
 }
 
 func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
 	var tagOnce sync.Once
 	for field, target := range p.reverseFlat {
 		if err := p.processField(field, target, p.Action, event); err != nil {
 			p.log.Debugf("DNS processor failed: %v", err)
-			tagOnce.Do(func() { common.AddTags(event.Fields, p.TagOnFailure) })
+			tagOnce.Do(func() { common.AddTags(fields, p.TagOnFailure) })
 		}
 	}
 	return event, nil

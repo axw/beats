@@ -85,7 +85,7 @@ func (p *fingerprint) String() string {
 	return fmt.Sprintf("%v=[method=[%v]]", processorName, p.config.Method)
 }
 
-func (p *fingerprint) writeFields(to io.Writer, eventFields common.MapStr) error {
+func (p *fingerprint) writeFields(to io.Writer, eventFields beat.Fielder) error {
 	for _, k := range p.fields {
 		v, err := eventFields.GetValue(k)
 		if err != nil {

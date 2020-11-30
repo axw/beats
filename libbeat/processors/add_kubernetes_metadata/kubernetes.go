@@ -243,7 +243,11 @@ func (k *kubernetesAnnotator) Run(event *beat.Event) (*beat.Event, error) {
 	if !k.kubernetesAvailable {
 		return event, nil
 	}
-	index := k.matchers.MetadataIndex(event.Fields)
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
+	index := k.matchers.MetadataIndex(fields)
 	if index == "" {
 		k.log.Debug("No container match string, not adding kubernetes data")
 		return event, nil

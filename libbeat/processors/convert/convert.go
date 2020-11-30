@@ -79,6 +79,11 @@ func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
 		return event, err
 	}
 
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
+
 	// Backup original event.
 	saved := *event
 	if len(p.Fields) > 1 && p.FailOnError {
@@ -86,7 +91,7 @@ func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
 		// failure (like a transaction). If there is only one conversion then
 		// cloning is unnecessary because there are no previous changes to
 		// rollback (so avoid the expensive clone operation).
-		saved.Fields = event.Fields.Clone()
+		saved.Fields = fields.Clone()
 		saved.Meta = event.Meta.Clone()
 	}
 

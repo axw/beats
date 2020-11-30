@@ -68,6 +68,11 @@ func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
 		err error
 	)
 
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
+
 	v, err = event.GetValue(p.config.Field)
 	if err != nil {
 		return event, err
@@ -92,7 +97,7 @@ func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
 	}
 	if err != nil {
 		if err := common.AddTagsWithKey(
-			event.Fields,
+			fields,
 			beat.FlagField,
 			[]string{flagParsingError},
 		); err != nil {
@@ -105,9 +110,9 @@ func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
 	}
 
 	if convertDataType {
-		event, err = p.mapper(event, mapInterfaceToMapStr(mc))
+		event, err = p.mapper(event, fields, mapInterfaceToMapStr(mc))
 	} else {
-		event, err = p.mapper(event, mapToMapStr(m))
+		event, err = p.mapper(event, fields, mapToMapStr(m))
 	}
 	if err != nil {
 		return event, err
@@ -116,8 +121,8 @@ func (p *processor) Run(event *beat.Event) (*beat.Event, error) {
 	return event, nil
 }
 
-func (p *processor) mapper(event *beat.Event, m common.MapStr) (*beat.Event, error) {
-	copy := event.Fields.Clone()
+func (p *processor) mapper(event *beat.Event, fields, m common.MapStr) (*beat.Event, error) {
+	copy := fields.Clone()
 
 	prefix := ""
 	if p.config.TargetPrefix != "" {

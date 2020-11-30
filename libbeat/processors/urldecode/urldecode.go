@@ -73,9 +73,14 @@ func New(c *common.Config) (processors.Processor, error) {
 }
 
 func (p *urlDecode) Run(event *beat.Event) (*beat.Event, error) {
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
+
 	var backup common.MapStr
 	if p.config.FailOnError {
-		backup = event.Fields.Clone()
+		backup = fields.Clone()
 	}
 
 	for _, field := range p.config.Fields {

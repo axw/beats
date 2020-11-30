@@ -100,9 +100,13 @@ func NewDecodeCSVField(c *common.Config) (processors.Processor, error) {
 
 // Run applies the decode_csv_field processor to an event.
 func (f *decodeCSVFields) Run(event *beat.Event) (*beat.Event, error) {
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
 	saved := *event
 	if f.FailOnError {
-		saved.Fields = event.Fields.Clone()
+		saved.Fields = fields.Clone()
 		saved.Meta = event.Meta.Clone()
 	}
 	for src, dest := range f.fields {

@@ -134,6 +134,7 @@ func (e *Event) SetErrorWithOption(jsonErr common.MapStr, addErrKey bool) {
 
 // XXX
 type Fielder interface {
+	HasKey(k string) (bool, error)
 	GetValue(k string) (interface{}, error)
 	Put(k string, v interface{}) (interface{}, error)
 	Delete(k string) error

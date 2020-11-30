@@ -18,6 +18,7 @@
 package timeseries
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/elastic/beats/v7/libbeat/beat"
@@ -66,26 +67,29 @@ func NewTimeSeriesProcessor(fields mapping.Fields) processors.Processor {
 }
 
 func (t *timeseriesProcessor) Run(event *beat.Event) (*beat.Event, error) {
-	if event.TimeSeries {
-		instanceFields := common.MapStr{}
+	if !event.TimeSeries {
+		return event, nil
+	}
 
-		// map all dimensions & values
-		for k, v := range event.Fields.Flatten() {
-			if t.isDimension(k) {
-				instanceFields[k] = v
-			}
-		}
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
 
-		h, err := hashstructure.Hash(instanceFields, nil)
-		if err != nil {
-			// this should not happen, keep the event in any case
-			return event, err
-		}
-		event.Fields["timeseries"] = common.MapStr{
-			"instance": h,
+	// map all dimensions & values
+	instanceFields := common.MapStr{}
+	for k, v := range fields.Flatten() {
+		if t.isDimension(k) {
+			instanceFields[k] = v
 		}
 	}
 
+	h, err := hashstructure.Hash(instanceFields, nil)
+	if err != nil {
+		// this should not happen, keep the event in any case
+		return event, err
+	}
+	fields["timeseries"] = common.MapStr{"instance": h}
 	return event, nil
 }
 

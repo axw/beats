@@ -159,8 +159,12 @@ func containsValue(m common.MapStr, v string) bool {
 
 // Run enriches the given event with the host meta data
 func (p *addProcessMetadata) Run(event *beat.Event) (*beat.Event, error) {
+	fields, ok := event.Fields.(common.MapStr)
+	if !ok {
+		return event, fmt.Errorf("common.MapStr required, but got %T", event.Fields)
+	}
 	for _, pidField := range p.config.MatchPIDs {
-		result, err := p.enrich(event.Fields, pidField)
+		result, err := p.enrich(fields, pidField)
 		if err != nil {
 			switch err {
 			case common.ErrKeyNotFound:
