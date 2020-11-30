@@ -21,15 +21,14 @@ import (
 	"time"
 
 	"github.com/elastic/beats/v7/libbeat/beat"
-	"github.com/elastic/beats/v7/libbeat/common"
 )
 
 // Event describes the event structure for events
 // (in-)directly send to logstash
 type event struct {
-	Timestamp time.Time     `struct:"@timestamp"`
-	Meta      meta          `struct:"@metadata"`
-	Fields    common.MapStr `struct:",inline"`
+	Timestamp time.Time   `struct:"@timestamp"`
+	Meta      meta        `struct:"@metadata"`
+	Fields    interface{} `struct:",inline"`
 }
 
 // Meta defines common event metadata to be stored in '@metadata'
