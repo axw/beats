@@ -35,7 +35,7 @@ const FlagField = "log.flags"
 type Event struct {
 	Timestamp  time.Time
 	Meta       common.MapStr
-	Fields     common.MapStr
+	Fields     Fielder
 	Private    interface{} // for beats private use
 	TimeSeries bool        // true if the event contains timeseries data
 }
@@ -128,6 +128,13 @@ func metadataKey(key string) (string, bool) {
 // SetErrorWithOption sets jsonErr value in the event fields according to addErrKey value.
 func (e *Event) SetErrorWithOption(jsonErr common.MapStr, addErrKey bool) {
 	if addErrKey {
-		e.Fields["error"] = jsonErr
+		e.Fields.Put("error", jsonErr)
 	}
+}
+
+// XXX
+type Fielder interface {
+	GetValue(k string) (interface{}, error)
+	Put(k string, v interface{}) (interface{}, error)
+	Delete(k string) error
 }
