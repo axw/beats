@@ -48,7 +48,7 @@ type entry struct {
 	Timestamp int64
 	Flags     uint8
 	Meta      common.MapStr
-	Fields    common.MapStr
+	Fields    interface{}
 }
 
 const (
@@ -128,17 +128,14 @@ func (d *eventDecoder) Buffer(n int) []byte {
 }
 
 func (d *eventDecoder) Decode() (publisher.Event, error) {
-	var (
-		to  entry
-		err error
-	)
+	fields := common.MapStr{}
+	to := entry{Fields: fields}
+	to.Fields = fields
 
 	d.unfolder.SetTarget(&to)
 	defer d.unfolder.Reset()
 
-	err = d.parser.Parse(d.buf)
-
-	if err != nil {
+	if err := d.parser.Parse(d.buf); err != nil {
 		d.reset() // reset parser just in case
 		return publisher.Event{}, err
 	}
@@ -147,7 +144,7 @@ func (d *eventDecoder) Decode() (publisher.Event, error) {
 		Flags: publisher.EventFlags(to.Flags),
 		Content: beat.Event{
 			Timestamp: time.Unix(0, to.Timestamp),
-			Fields:    to.Fields,
+			Fields:    fields,
 			Meta:      to.Meta,
 		},
 	}, nil

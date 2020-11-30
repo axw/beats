@@ -54,7 +54,7 @@ type entry struct {
 	Timestamp int64
 	Flags     uint8
 	Meta      common.MapStr
-	Fields    common.MapStr
+	Fields    interface{}
 }
 
 const (
@@ -162,15 +162,17 @@ func (d *decoder) Buffer(n int) []byte {
 
 func (d *decoder) Decode() (publisher.Event, error) {
 	var (
-		to       entry
-		err      error
 		codec    = codecID(d.buf[0])
 		contents = d.buf[1:]
 	)
 
+	fields := common.MapStr{}
+	to := entry{Fields: fields}
+
 	d.unfolder.SetTarget(&to)
 	defer d.unfolder.Reset()
 
+	var err error
 	switch codec {
 	case codecJSON:
 		err = d.json.Parse(contents)
@@ -196,7 +198,7 @@ func (d *decoder) Decode() (publisher.Event, error) {
 		Flags: flags,
 		Content: beat.Event{
 			Timestamp: time.Unix(0, to.Timestamp),
-			Fields:    to.Fields,
+			Fields:    fields,
 			Meta:      to.Meta,
 		},
 	}, nil
