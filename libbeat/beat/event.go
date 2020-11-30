@@ -137,4 +137,7 @@ type Fielder interface {
 	GetValue(k string) (interface{}, error)
 	Put(k string, v interface{}) (interface{}, error)
 	Delete(k string) error
+
+	DeepUpdate(common.MapStr)
+	DeepUpdateNoOverwrite(common.MapStr)
 }
