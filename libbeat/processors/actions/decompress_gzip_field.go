@@ -67,13 +67,17 @@ func NewDecompressGzipFields(c *common.Config) (processors.Processor, error) {
 
 // Run applies the decompress_gzip_fields processor to an event.
 func (f *decompressGzipField) Run(event *beat.Event) (*beat.Event, error) {
-	var backup common.MapStr
-	if f.config.FailOnError {
-		backup = event.Fields.Clone()
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
 	}
 
-	err := f.decompressGzipField(event)
-	if err != nil {
+	var backup common.MapStr
+	if f.config.FailOnError {
+		backup = fields.Clone()
+	}
+
+	if err := f.decompressGzipField(event); err != nil {
 		errMsg := fmt.Errorf("Failed to decompress field in decompress_gzip_field processor: %v", err)
 		f.log.Debug(errMsg.Error())
 		if f.config.FailOnError {

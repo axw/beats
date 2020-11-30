@@ -73,14 +73,19 @@ func NewReplaceString(c *common.Config) (processors.Processor, error) {
 }
 
 func (f *replaceString) Run(event *beat.Event) (*beat.Event, error) {
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
+	}
+
 	var backup common.MapStr
 	// Creates a copy of the event to revert in case of failure
 	if f.config.FailOnError {
-		backup = event.Fields.Clone()
+		backup = fields.Clone()
 	}
 
 	for _, field := range f.config.Fields {
-		err := f.replaceField(field.Field, field.Pattern, field.Replacement, event.Fields)
+		err := f.replaceField(field.Field, field.Pattern, field.Replacement, fields)
 		if err != nil {
 			errMsg := fmt.Errorf("Failed to replace fields in processor: %s", err)
 			logp.Debug("replace", errMsg.Error())

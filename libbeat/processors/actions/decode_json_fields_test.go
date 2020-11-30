@@ -410,5 +410,5 @@ func getActualValue(t *testing.T, config *common.Config, input common.MapStr) co
 	}
 
 	actual, _ := p.Run(&beat.Event{Fields: input})
-	return actual.Fields
+	return actual.Fields.(common.MapStr)
 }

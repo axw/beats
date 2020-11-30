@@ -82,9 +82,14 @@ func NewTruncateFields(c *common.Config) (processors.Processor, error) {
 }
 
 func (f *truncateFields) Run(event *beat.Event) (*beat.Event, error) {
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
+	}
+
 	var backup common.MapStr
 	if f.config.FailOnError {
-		backup = event.Fields.Clone()
+		backup = fields.Clone()
 	}
 
 	for _, field := range f.config.Fields {
@@ -132,7 +137,11 @@ func (f *truncateFields) addTruncatedString(field, value string, event *beat.Eve
 	}
 
 	if isTruncated {
-		common.AddTagsWithKey(event.Fields, "log.flags", []string{"truncated"})
+		fields, err := getMapStrFields(event)
+		if err != nil {
+			return nil, err
+		}
+		common.AddTagsWithKey(fields, "log.flags", []string{"truncated"})
 	}
 
 	return event, nil
@@ -149,7 +158,11 @@ func (f *truncateFields) addTruncatedByte(field string, value []byte, event *bea
 	}
 
 	if isTruncated {
-		common.AddTagsWithKey(event.Fields, "log.flags", []string{"truncated"})
+		fields, err := getMapStrFields(event)
+		if err != nil {
+			return nil, err
+		}
+		common.AddTagsWithKey(fields, "log.flags", []string{"truncated"})
 	}
 
 	return event, nil

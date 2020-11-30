@@ -73,14 +73,19 @@ func NewRenameFields(c *common.Config) (processors.Processor, error) {
 }
 
 func (f *renameFields) Run(event *beat.Event) (*beat.Event, error) {
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
+	}
+
 	var backup common.MapStr
 	// Creates a copy of the event to revert in case of failure
 	if f.config.FailOnError {
-		backup = event.Fields.Clone()
+		backup = fields.Clone()
 	}
 
 	for _, field := range f.config.Fields {
-		err := f.renameField(field.From, field.To, event.Fields)
+		err := f.renameField(field.From, field.To, fields)
 		if err != nil {
 			errMsg := fmt.Errorf("Failed to rename fields in processor: %s", err)
 			f.logger.Debug(errMsg.Error())

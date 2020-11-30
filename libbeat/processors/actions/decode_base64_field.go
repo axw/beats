@@ -73,14 +73,18 @@ func NewDecodeBase64Field(c *common.Config) (processors.Processor, error) {
 }
 
 func (f *decodeBase64Field) Run(event *beat.Event) (*beat.Event, error) {
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
+	}
+
 	var backup common.MapStr
 	// Creates a copy of the event to revert in case of failure
 	if f.config.FailOnError {
-		backup = event.Fields.Clone()
+		backup = fields.Clone()
 	}
 
-	err := f.decodeField(event)
-	if err != nil {
+	if err := f.decodeField(event); err != nil {
 		errMsg := fmt.Errorf("failed to decode base64 fields in processor: %v", err)
 		f.log.Debug(errMsg.Error())
 		if f.config.FailOnError {

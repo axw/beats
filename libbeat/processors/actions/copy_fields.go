@@ -69,13 +69,18 @@ func NewCopyFields(c *common.Config) (processors.Processor, error) {
 }
 
 func (f *copyFields) Run(event *beat.Event) (*beat.Event, error) {
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
+	}
+
 	var backup common.MapStr
 	if f.config.FailOnError {
-		backup = event.Fields.Clone()
+		backup = fields.Clone()
 	}
 
 	for _, field := range f.config.Fields {
-		err := f.copyField(field.From, field.To, event.Fields)
+		err := f.copyField(field.From, field.To, fields)
 		if err != nil {
 			errMsg := fmt.Errorf("Failed to copy fields in copy_fields processor: %s", err)
 			f.logger.Debug(errMsg.Error())

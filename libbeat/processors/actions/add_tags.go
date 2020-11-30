@@ -73,7 +73,11 @@ func NewAddTags(target string, tags []string) processors.Processor {
 }
 
 func (at *addTags) Run(event *beat.Event) (*beat.Event, error) {
-	common.AddTagsWithKey(event.Fields, at.target, at.tags)
+	fields, err := getMapStrFields(event)
+	if err != nil {
+		return nil, err
+	}
+	common.AddTagsWithKey(fields, at.target, at.tags)
 	return event, nil
 }
 
