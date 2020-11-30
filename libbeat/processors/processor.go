@@ -157,7 +157,8 @@ func (procs *Processors) RunBC(event common.MapStr) common.MapStr {
 	if ret == nil {
 		return nil
 	}
-	return ret.Fields
+	event, _ = ret.Fields.(common.MapStr)
+	return event
 }
 
 func (procs *Processors) All() []beat.Processor {

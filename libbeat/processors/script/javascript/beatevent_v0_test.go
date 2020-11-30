@@ -145,7 +145,7 @@ var eventV0Tests = []testCase{
 		source: `evt.Tag("foo"); evt.Tag("bar"); evt.Tag("foo");`,
 		assert: func(t testing.TB, evt *beat.Event, err error) {
 			if assert.NoError(t, err) {
-				assert.Equal(t, []string{"foo", "bar"}, evt.Fields["tags"])
+				assert.Equal(t, []string{"foo", "bar"}, evt.Fields.(common.MapStr)["tags"])
 			}
 		},
 	},

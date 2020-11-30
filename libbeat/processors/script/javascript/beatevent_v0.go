@@ -265,7 +265,7 @@ func (e *beatEventV0) appendTo(call goja.FunctionCall) goja.Value {
 	return goja.Undefined()
 }
 
-func appendString(m common.MapStr, field, value string, alwaysArray bool) error {
+func appendString(m beat.Fielder, field, value string, alwaysArray bool) error {
 	list, _ := m.GetValue(field)
 	switch v := list.(type) {
 	case nil:

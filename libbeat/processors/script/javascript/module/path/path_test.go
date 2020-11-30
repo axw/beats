@@ -58,7 +58,7 @@ function process(evt) {
 		t.Fatal(err)
 	}
 
-	fields := evt.Fields.Flatten()
+	fields := evt.Fields.(common.MapStr).Flatten()
 	assert.Equal(t, "system32.dll", fields["result.basename"])
 	assert.Equal(t, `C:\Windows\system32`, fields["result.dirname"])
 	assert.Equal(t, ".dll", fields["result.extname"])
@@ -95,7 +95,7 @@ function process(evt) {
 		t.Fatal(err)
 	}
 
-	fields := evt.Fields.Flatten()
+	fields := evt.Fields.(common.MapStr).Flatten()
 	assert.Equal(t, "libcurl.so", fields["result.basename"])
 	assert.Equal(t, "/usr/lib", fields["result.dirname"])
 	assert.Equal(t, ".so", fields["result.extname"])

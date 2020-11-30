@@ -18,6 +18,7 @@
 package javascript
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -205,11 +206,15 @@ func (s *session) setEvent(b *beat.Event) error {
 
 // runProcessFunc executes process() from the JS script.
 func (s *session) runProcessFunc(b *beat.Event) (out *beat.Event, err error) {
+	fields, ok := b.Fields.(common.MapStr)
+	if !ok {
+		return b, fmt.Errorf("javascript processor requires common.MapStr, got %T", b.Fields)
+	}
 	defer func() {
 		if r := recover(); r != nil {
 			s.log.Errorw("The javascript processor caused an unexpected panic "+
 				"while processing an event. Recovering, but please report this.",
-				"event", common.MapStr{"original": b.Fields.String()},
+				"event", common.MapStr{"original": fields.String()},
 				"panic", r,
 				zap.Stack("stack"))
 			if !s.evt.IsCancelled() {
@@ -217,9 +222,9 @@ func (s *session) runProcessFunc(b *beat.Event) (out *beat.Event, err error) {
 			}
 			err = errors.Errorf("unexpected panic in javascript processor: %v", r)
 			if s.tagOnException != "" {
-				common.AddTags(b.Fields, []string{s.tagOnException})
+				common.AddTags(fields, []string{s.tagOnException})
 			}
-			appendString(b.Fields, "error.message", err.Error(), false)
+			appendString(fields, "error.message", err.Error(), false)
 		}
 	}()
 
@@ -238,9 +243,9 @@ func (s *session) runProcessFunc(b *beat.Event) (out *beat.Event, err error) {
 
 	if _, err = s.processFunc(goja.Undefined(), s.evt.JSObject()); err != nil {
 		if s.tagOnException != "" {
-			common.AddTags(b.Fields, []string{s.tagOnException})
+			common.AddTags(fields, []string{s.tagOnException})
 		}
-		appendString(b.Fields, "error.message", err.Error(), false)
+		appendString(fields, "error.message", err.Error(), false)
 		return b, errors.Wrap(err, "failed in process function")
 	}
 
